@@ -1,41 +1,39 @@
 // SPDX-License-Identifier: GPL-2.0
+#include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 #include "util/string2.h"
 
 #include "demangle-ocaml.h"
+#include "demangle-ocaml-structured.h"
 
 #include <linux/ctype.h>
+
+/*
+ * Flat OCaml demangling
+ *
+ * Mangled symbols start with "caml" followed by an uppercase letter.
+ * "__" encodes "." and "$xx" encodes character with hex value xx.
+ */
 
 static const char *caml_prefix = "caml";
 static const size_t caml_prefix_len = 4;
 
-/* mangled OCaml symbols start with "caml" followed by an upper-case letter */
+/* mangled flat OCaml symbols start with "caml" followed by an upper-case letter */
 static bool
-ocaml_is_mangled(const char *sym)
+is_flat(const char *sym)
 {
 	return 0 == strncmp(sym, caml_prefix, caml_prefix_len)
 		&& isupper(sym[caml_prefix_len]);
 }
 
-/*
- * input:
- *     sym: a symbol which may have been mangled by the OCaml compiler
- * return:
- *     if the input doesn't look like a mangled OCaml symbol, NULL is returned
- *     otherwise, a newly allocated string containing the demangled symbol is returned
- */
-char *
-ocaml_demangle_sym(const char *sym)
+static char *
+ocaml_demangle_flat(const char *sym)
 {
 	char *result;
 	int j = 0;
 	int i;
 	int len;
-
-	if (!ocaml_is_mangled(sym)) {
-		return NULL;
-	}
 
 	len = strlen(sym);
 
@@ -65,4 +63,29 @@ ocaml_demangle_sym(const char *sym)
 	result[j] = '\0';
 
 	return result;
+}
+
+/*
+ * input:
+ *     sym: a symbol which may have been mangled by the OCaml compiler
+ * return:
+ *     if the input doesn't look like a mangled OCaml symbol, NULL is returned
+ *     otherwise, a newly allocated string containing the demangled symbol is returned
+ *
+ * Supports both:
+ *   - Flat mangling:       "caml<Name>..." (OCaml compiler 4.* through to 5.*)
+ *   - Structured mangling: "_Caml<path>"   (OxCaml compiler)
+ */
+char *
+ocaml_demangle_sym(const char *sym)
+{
+	char *result = ocaml_demangle_structured_sym(sym);
+
+	if (result)
+		return result;
+
+	if (is_flat(sym))
+		return ocaml_demangle_flat(sym);
+
+	return NULL;
 }
